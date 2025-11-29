@@ -11,8 +11,8 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 
 # ---------- CONFIG ----------
-AWS_REGION = "eu-west-2"  # AWS region
-S3_BUCKET = "actor-face-database"  # bucket name here
+AWS_REGION = os.getenv("AWS_REGION", "eu-west-2")
+S3_BUCKET = os.getenv("S3_BUCKET_NAME", "your-bucket-name")  # bucket name here
 EMBEDDINGS_KEY = "embeddings.json"   # path to embeddings in S3
 
 MODEL_NAME = "Facenet"
@@ -22,12 +22,12 @@ SIM_THRESHOLD = 0.7
 app = FastAPI(title="Face Search API")
 
 # Will hold embeddings in memory
-EMBEDDINGS: List[dict] = []
+EMBEDDINGS_LIST: List[dict] = []
 
 
 def load_embeddings_from_s3():
     """Load embeddings.json from S3 into memory."""
-    global EMBEDDINGS
+    global EMBEDDINGS_LIST
 
     s3 = boto3.client("s3", region_name=AWS_REGION)
     resp = s3.get_object(Bucket=S3_BUCKET, Key=EMBEDDINGS_KEY)
@@ -38,8 +38,8 @@ def load_embeddings_from_s3():
     for item in data:
         item["embedding"] = np.array(item["embedding"], dtype=np.float32)
 
-    EMBEDDINGS = data
-    print(f"Loaded {len(EMBEDDINGS)} embeddings from S3")
+    EMBEDDINGS_LIST = data
+    print(f"Loaded {len(EMBEDDINGS_LIST)} embeddings from S3")
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -76,14 +76,14 @@ async def search_face(image: UploadFile = File(...)):
 
     query_emb = np.array(reps[0]["embedding"], dtype=np.float32)
 
-    if not EMBEDDINGS:
+    if not EMBEDDINGS_LIST:
         raise HTTPException(status_code=500, detail="No embeddings loaded on server")
 
     # Find best match by cosine similarity
     best_sim: float = -1.0
     best_item: Optional[dict] = None
 
-    for item in EMBEDDINGS:
+    for item in EMBEDDINGS_LIST:
         sim = cosine_similarity(query_emb, item["embedding"])
         if sim > best_sim:
             best_sim = sim
